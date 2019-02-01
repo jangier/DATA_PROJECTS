@@ -3,8 +3,8 @@ title: "Kaggle Red Wine Quality"
 author: "Jessica Angier"
 date: "January 30, 2019"
 output:
-  github_document:
-  toc: true
+  md_document:
+    variant: markdown_github
 ---
 
 ```{r setup, include=FALSE}
@@ -51,7 +51,7 @@ library(dplyr)
 library(psych)
 library(randomForest)
 library(skimr)
-wine <- read_csv("input/winequality-red.csv")
+wine <- read_csv("data/winequality-red.csv")
 
 #Define chart color with a variable
 chartcolor <- "#722F37"
@@ -222,17 +222,6 @@ library(rpart.plot)
 prp(dtr_model,extra=101,box.col="orange",split.box.col="grey")
 ```
 
-```{r}
-
-library(performanceEstimation) 
-res <- performanceEstimation (
-  PredTask(quality ~., wine_lm, "quality"),
-  c(Workflow(learner="lm",pre="knnImp",post="onlyPos"),
-  workflowVariants(learner="rpartXse",learner.pars=list(se=c(0,0.5,1)))),
-  EstimationTask(metrics="nmse",method=CV(nReps=5,nFolds=10)))
-
-
-```
 
 
 ### Classification
