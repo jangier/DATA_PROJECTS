@@ -1,0 +1,252 @@
+---
+title: "Kaggle Red Wine Quality"
+author: "Jessica Angier"
+date: "January 30, 2019"
+output:
+  github_document:
+  toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Red Wine Quality
+
+The data set is sourced from Kaggle and contains wine data of the Portuguese "Vinho Verde" wine.  The inspiration of this dataset is to use machine learning to determine physichemical properties that would make a good wine.  
+
+[Kaggle Source](www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009/home)
+
+## Objective
+
+Use machine learning to determine physichemical properties that would make a good wine.  The dependant variable would be based on the quality of the wine.
+
+## Data Description
+
+The data contains 1,599 observations accross 12 variables.
+
+* Fixed Acidity - most acids involved with wine or fixed or nonvolatile (do not evaporate readily)
+* volatile acidity- the amount of acetic acid in wine, which at too high of levels can lead to an unpleasant, vinegar taste
+* citric acid- found in small quantities, citric acid can add 'freshness' and flavor to wines
+* residual sugar- the amount of sugar remaining after fermentation stops, it's rare to find wines with less than 1 gram/liter and wines with greater than 45 grams/liter are considered sweet
+* chlorides- the amount of salt in the wine
+* free sulfur dioxide- the free form of SO2 exists in equilibrium between molecular SO2 (as a dissolved gas) and bisulfite ion; it prevents microbial growth and the oxidation of wine
+* total sulfur dioxide - amount of free and bound forms of S02; in low concentrations, SO2 is mostly undetectable in wine, but at free SO2 concentrations over 50 ppm, SO2 becomes evident in the nose and taste of wine
+* density - the density of water is close to that of water depending on the percent alcohol and sugar content
+* pH- describes how acidic or basic a wine is on a scale from 0 (very acidic) to 14 (very basic); most wines are between 3-4 on the pH scale
+* sulphates- a wine additive which can contribute to sulfur dioxide gas (S02) levels, wich acts as an antimicrobial and antioxidant
+* alcohol- the percent alcohol content of the wine
+* quality - output variable (based on sensory data, score between 0 and 10)
+
+```{r, message = FALSE, warning=FALSE, echo=FALSE}
+#Load libraries and data
+library(readr)
+library(gridExtra)
+library(tidyverse)
+library(ggplot2)
+library(ggthemes)
+library(corrplot)
+library(reshape2)
+library(dplyr)
+library(psych)
+library(randomForest)
+library(skimr)
+wine <- read_csv("input/winequality-red.csv")
+
+#Define chart color with a variable
+chartcolor <- "#722F37"
+alertcolor <- "#e15759"
+trendcolor <- "#2a5783"
+
+#3db6c8
+#edc948 - greeny-yellow
+
+#Define chart attributes
+mychartattrib <- theme_minimal() +
+  theme(plot.subtitle = element_text(size=10, color="#49525e")) +
+  theme(plot.caption = element_text(size=9, color="#49525e"))+
+  theme(panel.border = 
+          element_blank(),
+        panel.grid.major = 
+          element_blank(), panel.grid.minor = 
+          element_blank(),
+        axis.line = element_line(color="gray"),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_blank())
+```
+
+
+```{r}
+wine %>% skim() %>% kable()
+```
+
+## Exploratory data analysis
+
+### Wine Quality
+
+Wine quality is the target variable of the analysis so it's important we understand its distribution.  There are a lot more normal wines than good or bad ones.  For the analysis we will be classifying the wines into 3 classes: good, normal, and bad, where normal would be equal to 5 or 6.  Normal wine is the majority class in the dataset with very limited bad wines.  
+
+```{r}
+#fix column names
+colnames(wine) <- wine %>% colnames() %>% str_replace_all(" ","_")
+
+#add new variables
+wine <- wine %>%
+  mutate(wine_score = ifelse(quality %in% 7:10, "Good", 
+                             ifelse(quality %in% 0:4, "Bad", "Normal")),
+         wine_score = factor(wine_score, levels=c("Good", "Normal", "Bad")))
+```
+
+
+
+```{r, fig.height = 3, fig.width = 8}
+library(RColorBrewer)
+my_cols <- c(brewer.pal(9,"RdGy"))[1:3] # select 4 colors from class Reds
+
+p1 <- ggplot(wine, aes(quality)) +
+  geom_bar(stat="count", fill=chartcolor) +
+    labs(title = "Wine quality scores") +
+    scale_x_continuous(breaks = seq(1,10,1))+
+  mychartattrib
+
+p2 <- ggplot(wine, aes(wine_score, fill=wine_score)) +
+  geom_bar(stat="count") +
+    labs(title = "Wine Classes based on score") +
+  scale_fill_manual(values = my_cols) +
+  mychartattrib
+
+grid.arrange(
+  p1,
+  p2,
+  nrow=1
+)
+```
+
+### Correlation
+
+http://www.sthda.com/english/wiki/visualize-correlation-matrix-using-correlogram 
+
+Here we are trying to understand the strength of the relationship between the predictors of wine quality.  Positive correlations are displayed in blue where negative correlations are displayed in red.  Color intensity and size are proportional to the correlation coefficients.  From below we are seeing that alcohol and volatile acidity are the most correlated with wine quality, where alcohol is negativly correlated and volatile acidity is positvely correlated.
+
+```{r}
+#describe(wine)
+w <- cor(wine[1:12])
+corrplot(w, type = "upper")
+```
+
+### Physichemical properties
+
+Here are the distributions of the physichemical properties of wine.  Density and pH both appear the closest to a normal distribution.  
+
+```{r, fig.width=8}
+wine %>%
+  select(-quality) %>%
+  keep(is.numeric) %>%
+  gather() %>%
+  ggplot(aes(x=value, fill=key)) +
+  geom_histogram(bins=sqrt(nrow(wine))) +
+  facet_wrap(~key, scales="free") +
+  mychartattrib +
+  theme(legend.position = "none") 
+```
+
+```{r, fig.width=8}
+wine %>%
+  select(-quality) %>%
+  gather(key, value, -wine_score) %>%
+  ggplot(aes(x=value, fill=wine_score)) +
+  geom_density(alpha=0.25) +
+  facet_wrap(~key, scales="free") +
+  scale_fill_manual(values = my_cols) +
+  mychartattrib
+```
+
+## Modeling 
+
+### Linear Regression
+To predict the quality value of the wine between 3-8.
+
+To assess the correlations of the model going to run an initial model on the entire data set; this is not used for model accuracy understanding, but instead is being used to understand the relationships of the variables in the data.
+
+The portion of variance (R2) explained by the model below is 36%; which is not that impressive, but we can see the coefficients of the model and their importance to the model.  Using the 
+
+```{r}
+wine_lm <- wine[, 1:12]
+linear_model_full <- lm(formula = quality ~., data = wine_lm)
+summary(linear_model_full)
+```
+
+#### Stepwise regression
+
+Adding more variables will not always create a better model; generally the simpler model is prefered.  Including additional variables will reduce RMSE and increase the R2.  Goal with stepwise regression is to find the model that minimizes AIC.  AIC is a measure that penalizes the model with many variables.
+
+```{r}
+bw_elim <- step(linear_model_full)
+summary(bw_elim)
+```
+
+Run the multiple linear regression on the suggested predictors as selected by backwards elimination.
+
+The proportion of variance explained by the model of 35% is still not great, so this suggests this type of modeling may not be right for the data.
+
+```{r}
+library(caTools)
+set.seed(123)
+split <-sample.split(wine_lm$quality, SplitRatio = 0.8)
+train <-subset(wine_lm, split == TRUE)
+test <- subset(wine_lm, split == FALSE)
+
+linear_model_2 <- lm(formula = quality ~ volatile_acidity + chlorides + free_sulfur_dioxide + total_sulfur_dioxide + pH + sulphates + alcohol, 
+                data = train) 
+summary(linear_model_2)
+plot(linear_model_2)
+
+predicted <- predict(linear_model_2, newdata = test)
+
+
+```
+
+
+### Decision tree - regression
+
+```{r}
+library(rpart)
+
+dtr_model <- rpart(quality ~., data = train)
+dtr_model
+
+```
+
+```{r}
+library(rpart.plot) 
+prp(dtr_model,extra=101,box.col="orange",split.box.col="grey")
+```
+
+```{r}
+
+library(performanceEstimation) 
+res <- performanceEstimation (
+  PredTask(quality ~., wine_lm, "quality"),
+  c(Workflow(learner="lm",pre="knnImp",post="onlyPos"),
+  workflowVariants(learner="rpartXse",learner.pars=list(se=c(0,0.5,1)))),
+  EstimationTask(metrics="nmse",method=CV(nReps=5,nFolds=10)))
+
+
+```
+
+
+### Classification
+
+To predict if the wine is good, normal, or bad.  Used to predict a class.
+
+
+
+
+
+## References and sources
+
+https://www.kaggle.com/meepbobeep/intro-to-regression-and-classification-in-r/code
+
+https://www.kaggle.com/mrshih/time-to-wine-down-and-avoid-pour-decisions-eda 
+
+https://www.kaggle.com/grosvenpaul/beginners-guide-to-eda-and-random-forest-using-r 
