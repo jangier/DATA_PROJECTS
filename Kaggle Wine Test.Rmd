@@ -15,7 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 The data set is sourced from Kaggle and contains wine data of the Portuguese "Vinho Verde" wine.  The inspiration of this dataset is to use machine learning to determine physichemical properties that would make a good wine.  
 
-[Kaggle Source](www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009/home)
+www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009/home
 
 ## Objective
 
@@ -84,7 +84,12 @@ wine %>% skim() %>% kable()
 
 ### Wine Quality
 
-Wine quality is the target variable of the analysis so it's important we understand its distribution.  There are a lot more normal wines than good or bad ones.  For the analysis we will be classifying the wines into 3 classes: good, normal, and bad, where normal would be equal to 5 or 6.  Normal wine is the majority class in the dataset with very limited bad wines.  
+Wine quality is the target variable of the analysis so it's important we understand its distribution.  There are a lot more normal wines than good or bad ones.  For the analysis we will be classifying the wines into 4 classes: good, normal, tolerable and bad.
+
+* good = quality greater than 7
+* normal = qaulity of 6
+* tolerable = quality of 5
+* bad = under 4
 
 ```{r}
 #fix column names
@@ -93,15 +98,19 @@ colnames(wine) <- wine %>% colnames() %>% str_replace_all(" ","_")
 #add new variables
 wine <- wine %>%
   mutate(wine_score = ifelse(quality %in% 7:10, "Good", 
-                             ifelse(quality %in% 0:4, "Bad", "Normal")),
-         wine_score = factor(wine_score, levels=c("Good", "Normal", "Bad")))
+                             ifelse(quality %in% 0:4, "Bad", 
+                                    ifelse(quality==6, "Normal", "Tolerable"))),
+         wine_score = factor(wine_score, levels=c("Bad", "Tolerable", "Normal", "Good")))
 ```
 
+```{r}
+table(wine$wine_score)
+```
 
 
 ```{r, fig.height = 3, fig.width = 8}
 library(RColorBrewer)
-my_cols <- c(brewer.pal(9,"RdGy"))[1:3] # select 4 colors from class Reds
+my_cols <- c(brewer.pal(9,"RdGy"))[1:4] # select 4 colors from class Reds
 
 p1 <- ggplot(wine, aes(quality)) +
   geom_bar(stat="count", fill=chartcolor) +
@@ -134,7 +143,7 @@ w <- cor(wine[1:12])
 corrplot(w, type = "upper")
 ```
 
-### Physichemical properties
+### Chemical properties
 
 Here are the distributions of the physichemical properties of wine.  Density and pH both appear the closest to a normal distribution.  
 
@@ -161,81 +170,168 @@ wine %>%
   mychartattrib
 ```
 
+```{r}
+
+```
+
+
+
+
+
 ## Modeling 
 
-### Linear Regression
-To predict the quality value of the wine between 3-8.
+The goal is to model the class of the wine based on variables that are the chemical properties of the wine.  Using EDA we have determine that alcohol, volatile acidity, citric acid, and sulphates appear to be the most correlated with wine quality.  
 
-To assess the correlations of the model going to run an initial model on the entire data set; this is not used for model accuracy understanding, but instead is being used to understand the relationships of the variables in the data.
-
-The portion of variance (R2) explained by the model below is 36%; which is not that impressive, but we can see the coefficients of the model and their importance to the model.  Using the 
+### Random Forest for variable importance 
 
 ```{r}
-wine_lm <- wine[, 1:12]
-linear_model_full <- lm(formula = quality ~., data = wine_lm)
-summary(linear_model_full)
+library(randomForest)
+wine2 <- wine %>% select(-quality)
+fit <- randomForest(wine_score ~., data = wine2, importance=T)
+importance(fit) # view results 
+varImpPlot(fit,main="Feature Relevance Scores")
+
 ```
 
-#### Stepwise regression
+### Random Forest modeling
 
-Adding more variables will not always create a better model; generally the simpler model is prefered.  Including additional variables will reduce RMSE and increase the R2.  Goal with stepwise regression is to find the model that minimizes AIC.  AIC is a measure that penalizes the model with many variables.
-
-```{r}
-bw_elim <- step(linear_model_full)
-summary(bw_elim)
-```
-
-Run the multiple linear regression on the suggested predictors as selected by backwards elimination.
-
-The proportion of variance explained by the model of 35% is still not great, so this suggests this type of modeling may not be right for the data.
+Initial unbalanced data set - randomly divide into train and test stratified by class and perform Random Forest with 5x5 repeated cross-validation.
 
 ```{r}
+#random sample 75/25 split
 library(caTools)
 set.seed(123)
-split <-sample.split(wine_lm$quality, SplitRatio = 0.8)
-train <-subset(wine_lm, split == TRUE)
-test <- subset(wine_lm, split == FALSE)
-
-linear_model_2 <- lm(formula = quality ~ volatile_acidity + chlorides + free_sulfur_dioxide + total_sulfur_dioxide + pH + sulphates + alcohol, 
-                data = train) 
-summary(linear_model_2)
-plot(linear_model_2)
-
-predicted <- predict(linear_model_2, newdata = test)
-
+split = sample.split(wine2$wine_score, SplitRatio = 0.75)
+train = subset(wine2, split == TRUE)
+test = subset(wine2, split == FALSE)
 
 ```
 
+```{r}
+# Feature Scaling
+train[-12] <- scale(train[-12])
+test[-12] <- scale(test[-12])
+```
 
-### Decision tree - regression
+```{r}
+# model on train
+library(caret)
+set.seed(42)
+model_rf <- train(wine_score ~ .,
+                         data = train,
+                         method = "rf",
+                         preProcess = c("scale", "center"),
+                         trControl = trainControl(method = "repeatedcv", 
+                                                  number = 5, 
+                                                  repeats = 5, 
+                                                  verboseIter = FALSE))
+```
+
+```{r}
+final <- data.frame(actual = test$wine_score,
+                    predict(model_rf, newdata = test))
+```
+
+```{r}
+cm_original <- confusionMatrix(final$predict, test$wine_score)
+cm_original
+```
+
+Use SMOTE for unbalanced dataset - "Synthetic Minority Over-sampling Technique" - method that applies over-sampling to the minority class creating synthetic minority class examples.
+
+```{r}
+#smote 
+ctrl <- trainControl(method = "repeatedcv", 
+                     number = 5, 
+                     repeats = 5, 
+                     verboseIter = FALSE,
+                     sampling = "smote")
+
+set.seed(42)
+model_rf_smote <- train(wine_score ~ .,
+                              data = train,
+                              method = "rf",
+                              preProcess = c("scale", "center"),
+                              trControl = ctrl)
+```
+
+```{r}
+final_smote <- data.frame(actual = test$wine_score,
+                         predict(model_rf_smote, newdata = test))
+```
+
+```{r}
+cm_smote <- confusionMatrix(final_smote$predict, test$wine_score)
+cm_smote
+```
+
+Compare predictions for the sampling methods
+
+```{r}
+models <- list(original = model_rf,
+                       smote = model_rf_smote)
+resampling <- resamples(models)
+bwplot(resampling)
+```
+
+
+```{r}
+
+# Feature Scaling
+#train = scale(training_set[-3])
+#test_set[-3] = scale(test_set[-3])
+
+
+#compare train/test sets
+table(train$wine_score)
+table(test$wine_score)
+```
+
+
+```{r}
+#baseline model
+rf_base <-randomForest(wine_score~.,train,ntree=150)
+
+#Confusion matrix results
+preds <- predict(rf_base, newdata=test)
+table(preds, test$wine_score) #confusion matrix for test set
+
+confusionMatrix(table(preds, test$wine_score))
+
+```
+
+### Decision tree
 
 ```{r}
 library(rpart)
+library(DMwR)
 
-dtr_model <- rpart(quality ~., data = train)
-dtr_model
+#apply model to training set
+#dtr_model <- rpartXse(quality ~., data = train)
+
+#predict values using test
+#prediction <- predict(dtr_model,test) 
 
 ```
 
 ```{r}
-library(rpart.plot) 
-prp(dtr_model,extra=101,box.col="orange",split.box.col="grey")
+#library(rpart.plot) 
+#prp(dtr_model,extra=101,box.col="orange",split.box.col="grey")
 ```
 
 
 
-### Classification
 
-To predict if the wine is good, normal, or bad.  Used to predict a class.
+## Sources and references:
 
+* Torgo, Luis. Data Mining in R. Oakville, Canada: Apple Academic Press Inc., 2017.  Print. 
 
+* https://shiring.github.io/machine_learning/2017/04/02/unbalanced
 
+* data source: www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009/home 
 
+* https://www.kaggle.com/meepbobeep/intro-to-regression-and-classification-in-r/code
 
-## References and sources
+* https://www.kaggle.com/mrshih/time-to-wine-down-and-avoid-pour-decisions-eda 
 
-https://www.kaggle.com/meepbobeep/intro-to-regression-and-classification-in-r/code
-
-https://www.kaggle.com/mrshih/time-to-wine-down-and-avoid-pour-decisions-eda 
-
-https://www.kaggle.com/grosvenpaul/beginners-guide-to-eda-and-random-forest-using-r 
+* https://www.kaggle.com/grosvenpaul/beginners-guide-to-eda-and-random-forest-using-r 

@@ -3,7 +3,7 @@ Red Wine Quality
 
 The data set is sourced from Kaggle and contains wine data of the Portuguese "Vinho Verde" wine. The inspiration of this dataset is to use machine learning to determine physichemical properties that would make a good wine.
 
-[Kaggle Source](www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009/home)
+www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009/home
 
 Objective
 ---------
@@ -63,7 +63,12 @@ Exploratory data analysis
 
 ### Wine Quality
 
-Wine quality is the target variable of the analysis so it's important we understand its distribution. There are a lot more normal wines than good or bad ones. For the analysis we will be classifying the wines into 3 classes: good, normal, and bad, where normal would be equal to 5 or 6. Normal wine is the majority class in the dataset with very limited bad wines.
+Wine quality is the target variable of the analysis so it's important we understand its distribution. There are a lot more normal wines than good or bad ones. For the analysis we will be classifying the wines into 4 classes: good, normal, tolerable and bad.
+
+-   good = quality greater than 7
+-   normal = qaulity of 6
+-   tolerable = quality of 5
+-   bad = under 4
 
 ``` r
 #fix column names
@@ -72,13 +77,22 @@ colnames(wine) <- wine %>% colnames() %>% str_replace_all(" ","_")
 #add new variables
 wine <- wine %>%
   mutate(wine_score = ifelse(quality %in% 7:10, "Good", 
-                             ifelse(quality %in% 0:4, "Bad", "Normal")),
-         wine_score = factor(wine_score, levels=c("Good", "Normal", "Bad")))
+                             ifelse(quality %in% 0:4, "Bad", 
+                                    ifelse(quality==6, "Normal", "Tolerable"))),
+         wine_score = factor(wine_score, levels=c("Bad", "Tolerable", "Normal", "Good")))
 ```
 
 ``` r
+table(wine$wine_score)
+```
+
+    ## 
+    ##       Bad Tolerable    Normal      Good 
+    ##        63       681       638       217
+
+``` r
 library(RColorBrewer)
-my_cols <- c(brewer.pal(9,"RdGy"))[1:3] # select 4 colors from class Reds
+my_cols <- c(brewer.pal(9,"RdGy"))[1:4] # select 4 colors from class Reds
 
 p1 <- ggplot(wine, aes(quality)) +
   geom_bar(stat="count", fill=chartcolor) +
@@ -99,7 +113,7 @@ grid.arrange(
 )
 ```
 
-![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-4-1.png)
+![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-5-1.png)
 
 ### Correlation
 
@@ -113,9 +127,9 @@ w <- cor(wine[1:12])
 corrplot(w, type = "upper")
 ```
 
-![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-5-1.png)
+![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-6-1.png)
 
-### Physichemical properties
+### Chemical properties
 
 Here are the distributions of the physichemical properties of wine. Density and pH both appear the closest to a normal distribution.
 
@@ -131,7 +145,7 @@ wine %>%
   theme(legend.position = "none") 
 ```
 
-![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-6-1.png)
+![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-7-1.png)
 
 ``` r
 wine %>%
@@ -144,286 +158,313 @@ wine %>%
   mychartattrib
 ```
 
-![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-7-1.png)
+![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-8-1.png)
 
 Modeling
 --------
 
-### Linear Regression
+The goal is to model the class of the wine based on variables that are the chemical properties of the wine. Using EDA we have determine that alcohol, volatile acidity, citric acid, and sulphates appear to be the most correlated with wine quality.
 
-To predict the quality value of the wine between 3-8.
-
-To assess the correlations of the model going to run an initial model on the entire data set; this is not used for model accuracy understanding, but instead is being used to understand the relationships of the variables in the data.
-
-The portion of variance (R2) explained by the model below is 36%; which is not that impressive, but we can see the coefficients of the model and their importance to the model. Using the
+### Random Forest for variable importance
 
 ``` r
-wine_lm <- wine[, 1:12]
-linear_model_full <- lm(formula = quality ~., data = wine_lm)
-summary(linear_model_full)
+library(randomForest)
+wine2 <- wine %>% select(-quality)
+fit <- randomForest(wine_score ~., data = wine2, importance=T)
+importance(fit) # view results 
 ```
 
-    ## 
-    ## Call:
-    ## lm(formula = quality ~ ., data = wine_lm)
-    ## 
-    ## Residuals:
-    ##      Min       1Q   Median       3Q      Max 
-    ## -2.68911 -0.36652 -0.04699  0.45202  2.02498 
-    ## 
-    ## Coefficients:
-    ##                        Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)           2.197e+01  2.119e+01   1.036   0.3002    
-    ## fixed_acidity         2.499e-02  2.595e-02   0.963   0.3357    
-    ## volatile_acidity     -1.084e+00  1.211e-01  -8.948  < 2e-16 ***
-    ## citric_acid          -1.826e-01  1.472e-01  -1.240   0.2150    
-    ## residual_sugar        1.633e-02  1.500e-02   1.089   0.2765    
-    ## chlorides            -1.874e+00  4.193e-01  -4.470 8.37e-06 ***
-    ## free_sulfur_dioxide   4.361e-03  2.171e-03   2.009   0.0447 *  
-    ## total_sulfur_dioxide -3.265e-03  7.287e-04  -4.480 8.00e-06 ***
-    ## density              -1.788e+01  2.163e+01  -0.827   0.4086    
-    ## pH                   -4.137e-01  1.916e-01  -2.159   0.0310 *  
-    ## sulphates             9.163e-01  1.143e-01   8.014 2.13e-15 ***
-    ## alcohol               2.762e-01  2.648e-02  10.429  < 2e-16 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## Residual standard error: 0.648 on 1587 degrees of freedom
-    ## Multiple R-squared:  0.3606, Adjusted R-squared:  0.3561 
-    ## F-statistic: 81.35 on 11 and 1587 DF,  p-value: < 2.2e-16
-
-#### Stepwise regression
-
-Adding more variables will not always create a better model; generally the simpler model is prefered. Including additional variables will reduce RMSE and increase the R2. Goal with stepwise regression is to find the model that minimizes AIC. AIC is a measure that penalizes the model with many variables.
+    ##                             Bad Tolerable   Normal     Good
+    ## fixed_acidity         0.7027547  29.95710 21.91154 24.63529
+    ## volatile_acidity     15.3629916  38.99059 25.53394 43.55975
+    ## citric_acid           7.7604418  22.94049 22.00606 25.40341
+    ## residual_sugar        2.2741893  27.71499 25.44622 26.31401
+    ## chlorides             2.0669805  34.24462 25.02185 22.43214
+    ## free_sulfur_dioxide   5.0979221  27.33401 25.25555 20.03476
+    ## total_sulfur_dioxide  6.2361481  40.48652 34.32961 35.26615
+    ## density              -1.8137402  29.42368 31.27829 30.03723
+    ## pH                    6.0686434  27.93319 22.29602 23.70756
+    ## sulphates             7.8594935  43.01193 39.94334 49.31280
+    ## alcohol               4.6651509  66.13169 39.64259 53.14989
+    ##                      MeanDecreaseAccuracy MeanDecreaseGini
+    ## fixed_acidity                    41.08212         75.47112
+    ## volatile_acidity                 53.27050        108.18594
+    ## citric_acid                      37.30599         74.68562
+    ## residual_sugar                   41.08767         70.75768
+    ## chlorides                        44.01151         82.96125
+    ## free_sulfur_dioxide              41.31443         67.51716
+    ## total_sulfur_dioxide             54.92571        107.41698
+    ## density                          45.59799         93.79113
+    ## pH                               38.93779         76.48336
+    ## sulphates                        61.66180        113.09109
+    ## alcohol                          79.78617        151.22147
 
 ``` r
-bw_elim <- step(linear_model_full)
+varImpPlot(fit,main="Feature Relevance Scores")
 ```
 
-    ## Start:  AIC=-1375.49
-    ## quality ~ fixed_acidity + volatile_acidity + citric_acid + residual_sugar + 
-    ##     chlorides + free_sulfur_dioxide + total_sulfur_dioxide + 
-    ##     density + pH + sulphates + alcohol
-    ## 
-    ##                        Df Sum of Sq    RSS     AIC
-    ## - density               1     0.287 666.70 -1376.8
-    ## - fixed_acidity         1     0.389 666.80 -1376.5
-    ## - residual_sugar        1     0.498 666.91 -1376.3
-    ## - citric_acid           1     0.646 667.06 -1375.9
-    ## <none>                              666.41 -1375.5
-    ## - free_sulfur_dioxide   1     1.694 668.10 -1373.4
-    ## - pH                    1     1.957 668.37 -1372.8
-    ## - chlorides             1     8.391 674.80 -1357.5
-    ## - total_sulfur_dioxide  1     8.427 674.84 -1357.4
-    ## - sulphates             1    26.971 693.38 -1314.0
-    ## - volatile_acidity      1    33.620 700.03 -1298.8
-    ## - alcohol               1    45.672 712.08 -1271.5
-    ## 
-    ## Step:  AIC=-1376.8
-    ## quality ~ fixed_acidity + volatile_acidity + citric_acid + residual_sugar + 
-    ##     chlorides + free_sulfur_dioxide + total_sulfur_dioxide + 
-    ##     pH + sulphates + alcohol
-    ## 
-    ##                        Df Sum of Sq    RSS     AIC
-    ## - fixed_acidity         1     0.108 666.81 -1378.5
-    ## - residual_sugar        1     0.231 666.93 -1378.2
-    ## - citric_acid           1     0.654 667.35 -1377.2
-    ## <none>                              666.70 -1376.8
-    ## - free_sulfur_dioxide   1     1.829 668.53 -1374.4
-    ## - pH                    1     4.325 671.02 -1368.5
-    ## - total_sulfur_dioxide  1     8.728 675.43 -1358.0
-    ## - chlorides             1     8.761 675.46 -1357.9
-    ## - sulphates             1    27.287 693.98 -1314.7
-    ## - volatile_acidity      1    35.000 701.70 -1297.0
-    ## - alcohol               1   119.669 786.37 -1114.8
-    ## 
-    ## Step:  AIC=-1378.54
-    ## quality ~ volatile_acidity + citric_acid + residual_sugar + chlorides + 
-    ##     free_sulfur_dioxide + total_sulfur_dioxide + pH + sulphates + 
-    ##     alcohol
-    ## 
-    ##                        Df Sum of Sq    RSS     AIC
-    ## - residual_sugar        1     0.257 667.06 -1379.9
-    ## - citric_acid           1     0.565 667.37 -1379.2
-    ## <none>                              666.81 -1378.5
-    ## - free_sulfur_dioxide   1     1.901 668.71 -1376.0
-    ## - pH                    1     7.065 673.87 -1363.7
-    ## - chlorides             1     9.940 676.75 -1356.9
-    ## - total_sulfur_dioxide  1    10.031 676.84 -1356.7
-    ## - sulphates             1    27.673 694.48 -1315.5
-    ## - volatile_acidity      1    36.234 703.04 -1295.9
-    ## - alcohol               1   120.633 787.44 -1114.7
-    ## 
-    ## Step:  AIC=-1379.93
-    ## quality ~ volatile_acidity + citric_acid + chlorides + free_sulfur_dioxide + 
-    ##     total_sulfur_dioxide + pH + sulphates + alcohol
-    ## 
-    ##                        Df Sum of Sq    RSS     AIC
-    ## - citric_acid           1     0.475 667.54 -1380.8
-    ## <none>                              667.06 -1379.9
-    ## - free_sulfur_dioxide   1     2.064 669.13 -1377.0
-    ## - pH                    1     7.138 674.20 -1364.9
-    ## - total_sulfur_dioxide  1     9.828 676.89 -1358.5
-    ## - chlorides             1     9.832 676.89 -1358.5
-    ## - sulphates             1    27.446 694.51 -1317.5
-    ## - volatile_acidity      1    35.977 703.04 -1297.9
-    ## - alcohol               1   122.667 789.73 -1112.0
-    ## 
-    ## Step:  AIC=-1380.79
-    ## quality ~ volatile_acidity + chlorides + free_sulfur_dioxide + 
-    ##     total_sulfur_dioxide + pH + sulphates + alcohol
-    ## 
-    ##                        Df Sum of Sq    RSS     AIC
-    ## <none>                              667.54 -1380.8
-    ## - free_sulfur_dioxide   1     2.394 669.93 -1377.1
-    ## - pH                    1     7.073 674.61 -1365.9
-    ## - total_sulfur_dioxide  1    10.787 678.32 -1357.2
-    ## - chlorides             1    10.809 678.35 -1357.1
-    ## - sulphates             1    27.060 694.60 -1319.2
-    ## - volatile_acidity      1    42.318 709.85 -1284.5
-    ## - alcohol               1   124.483 792.02 -1109.4
+![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-10-1.png)
+
+### Random Forest modeling
+
+Initial unbalanced data set - randomly divide into train and test stratified by class and perform Random Forest with 5x5 repeated cross-validation.
 
 ``` r
-summary(bw_elim)
-```
-
-    ## 
-    ## Call:
-    ## lm(formula = quality ~ volatile_acidity + chlorides + free_sulfur_dioxide + 
-    ##     total_sulfur_dioxide + pH + sulphates + alcohol, data = wine_lm)
-    ## 
-    ## Residuals:
-    ##      Min       1Q   Median       3Q      Max 
-    ## -2.68918 -0.36757 -0.04653  0.46081  2.02954 
-    ## 
-    ## Coefficients:
-    ##                        Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)           4.4300987  0.4029168  10.995  < 2e-16 ***
-    ## volatile_acidity     -1.0127527  0.1008429 -10.043  < 2e-16 ***
-    ## chlorides            -2.0178138  0.3975417  -5.076 4.31e-07 ***
-    ## free_sulfur_dioxide   0.0050774  0.0021255   2.389    0.017 *  
-    ## total_sulfur_dioxide -0.0034822  0.0006868  -5.070 4.43e-07 ***
-    ## pH                   -0.4826614  0.1175581  -4.106 4.23e-05 ***
-    ## sulphates             0.8826651  0.1099084   8.031 1.86e-15 ***
-    ## alcohol               0.2893028  0.0167958  17.225  < 2e-16 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## Residual standard error: 0.6477 on 1591 degrees of freedom
-    ## Multiple R-squared:  0.3595, Adjusted R-squared:  0.3567 
-    ## F-statistic: 127.6 on 7 and 1591 DF,  p-value: < 2.2e-16
-
-Run the multiple linear regression on the suggested predictors as selected by backwards elimination.
-
-The proportion of variance explained by the model of 35% is still not great, so this suggests this type of modeling may not be right for the data.
-
-``` r
+#random sample 75/25 split
 library(caTools)
 set.seed(123)
-split <-sample.split(wine_lm$quality, SplitRatio = 0.8)
-train <-subset(wine_lm, split == TRUE)
-test <- subset(wine_lm, split == FALSE)
-
-linear_model_2 <- lm(formula = quality ~ volatile_acidity + chlorides + free_sulfur_dioxide + total_sulfur_dioxide + pH + sulphates + alcohol, 
-                data = train) 
-summary(linear_model_2)
+split = sample.split(wine2$wine_score, SplitRatio = 0.75)
+train = subset(wine2, split == TRUE)
+test = subset(wine2, split == FALSE)
 ```
-
-    ## 
-    ## Call:
-    ## lm(formula = quality ~ volatile_acidity + chlorides + free_sulfur_dioxide + 
-    ##     total_sulfur_dioxide + pH + sulphates + alcohol, data = train)
-    ## 
-    ## Residuals:
-    ##      Min       1Q   Median       3Q      Max 
-    ## -2.65073 -0.36593 -0.05744  0.46318  1.96471 
-    ## 
-    ## Coefficients:
-    ##                        Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)           4.4948865  0.4550300   9.878  < 2e-16 ***
-    ## volatile_acidity     -0.9091582  0.1133057  -8.024 2.31e-15 ***
-    ## chlorides            -2.0537295  0.4346407  -4.725 2.56e-06 ***
-    ## free_sulfur_dioxide   0.0038475  0.0024361   1.579    0.115    
-    ## total_sulfur_dioxide -0.0031973  0.0007645  -4.182 3.09e-05 ***
-    ## pH                   -0.5427825  0.1334475  -4.067 5.05e-05 ***
-    ## sulphates             0.8727330  0.1266074   6.893 8.57e-12 ***
-    ## alcohol               0.2990284  0.0189449  15.784  < 2e-16 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## Residual standard error: 0.6512 on 1270 degrees of freedom
-    ## Multiple R-squared:  0.3513, Adjusted R-squared:  0.3477 
-    ## F-statistic: 98.24 on 7 and 1270 DF,  p-value: < 2.2e-16
 
 ``` r
-plot(linear_model_2)
+# Feature Scaling
+train[-12] <- scale(train[-12])
+test[-12] <- scale(test[-12])
 ```
-
-![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-10-1.png)![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-10-2.png)![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-10-3.png)![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-10-4.png)
 
 ``` r
-predicted <- predict(linear_model_2, newdata = test)
+# model on train
+library(caret)
 ```
 
-### Decision tree - regression
+    ## Loading required package: lattice
+
+    ## 
+    ## Attaching package: 'caret'
+
+    ## The following object is masked from 'package:purrr':
+    ## 
+    ##     lift
+
+``` r
+set.seed(42)
+model_rf <- train(wine_score ~ .,
+                         data = train,
+                         method = "rf",
+                         preProcess = c("scale", "center"),
+                         trControl = trainControl(method = "repeatedcv", 
+                                                  number = 5, 
+                                                  repeats = 5, 
+                                                  verboseIter = FALSE))
+```
+
+``` r
+final <- data.frame(actual = test$wine_score,
+                    predict(model_rf, newdata = test))
+```
+
+``` r
+cm_original <- confusionMatrix(final$predict, test$wine_score)
+cm_original
+```
+
+    ## Confusion Matrix and Statistics
+    ## 
+    ##            Reference
+    ## Prediction  Bad Tolerable Normal Good
+    ##   Bad         1         0      0    0
+    ##   Tolerable  13       141     38    1
+    ##   Normal      2        27    112   29
+    ##   Good        0         2     10   24
+    ## 
+    ## Overall Statistics
+    ##                                           
+    ##                Accuracy : 0.695           
+    ##                  95% CI : (0.6473, 0.7398)
+    ##     No Information Rate : 0.425           
+    ##     P-Value [Acc > NIR] : < 2.2e-16       
+    ##                                           
+    ##                   Kappa : 0.5022          
+    ##  Mcnemar's Test P-Value : NA              
+    ## 
+    ## Statistics by Class:
+    ## 
+    ##                      Class: Bad Class: Tolerable Class: Normal Class: Good
+    ## Sensitivity              0.0625           0.8294        0.7000      0.4444
+    ## Specificity              1.0000           0.7739        0.7583      0.9653
+    ## Pos Pred Value           1.0000           0.7306        0.6588      0.6667
+    ## Neg Pred Value           0.9624           0.8599        0.7913      0.9176
+    ## Prevalence               0.0400           0.4250        0.4000      0.1350
+    ## Detection Rate           0.0025           0.3525        0.2800      0.0600
+    ## Detection Prevalence     0.0025           0.4825        0.4250      0.0900
+    ## Balanced Accuracy        0.5312           0.8017        0.7292      0.7049
+
+Use SMOTE for unbalanced dataset - "Synthetic Minority Over-sampling Technique" - method that applies over-sampling to the minority class creating synthetic minority class examples.
+
+``` r
+#smote 
+ctrl <- trainControl(method = "repeatedcv", 
+                     number = 5, 
+                     repeats = 5, 
+                     verboseIter = FALSE,
+                     sampling = "smote")
+
+set.seed(42)
+model_rf_smote <- train(wine_score ~ .,
+                              data = train,
+                              method = "rf",
+                              preProcess = c("scale", "center"),
+                              trControl = ctrl)
+```
+
+    ## Loading required package: grid
+
+``` r
+final_smote <- data.frame(actual = test$wine_score,
+                         predict(model_rf_smote, newdata = test))
+```
+
+``` r
+cm_smote <- confusionMatrix(final_smote$predict, test$wine_score)
+cm_smote
+```
+
+    ## Confusion Matrix and Statistics
+    ## 
+    ##            Reference
+    ## Prediction  Bad Tolerable Normal Good
+    ##   Bad        11        43     25    8
+    ##   Tolerable   4        92     33    3
+    ##   Normal      1        34     82   20
+    ##   Good        0         1     20   23
+    ## 
+    ## Overall Statistics
+    ##                                           
+    ##                Accuracy : 0.52            
+    ##                  95% CI : (0.4698, 0.5699)
+    ##     No Information Rate : 0.425           
+    ##     P-Value [Acc > NIR] : 8.163e-05       
+    ##                                           
+    ##                   Kappa : 0.3135          
+    ##  Mcnemar's Test P-Value : 8.605e-12       
+    ## 
+    ## Statistics by Class:
+    ## 
+    ##                      Class: Bad Class: Tolerable Class: Normal Class: Good
+    ## Sensitivity              0.6875           0.5412        0.5125      0.4259
+    ## Specificity              0.8021           0.8261        0.7708      0.9393
+    ## Pos Pred Value           0.1264           0.6970        0.5985      0.5227
+    ## Neg Pred Value           0.9840           0.7090        0.7034      0.9129
+    ## Prevalence               0.0400           0.4250        0.4000      0.1350
+    ## Detection Rate           0.0275           0.2300        0.2050      0.0575
+    ## Detection Prevalence     0.2175           0.3300        0.3425      0.1100
+    ## Balanced Accuracy        0.7448           0.6836        0.6417      0.6826
+
+Compare predictions for the sampling methods
+
+``` r
+models <- list(original = model_rf,
+                       smote = model_rf_smote)
+resampling <- resamples(models)
+bwplot(resampling)
+```
+
+![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-19-1.png)
+
+``` r
+# Feature Scaling
+#train = scale(training_set[-3])
+#test_set[-3] = scale(test_set[-3])
+
+
+#compare train/test sets
+table(train$wine_score)
+```
+
+    ## 
+    ##       Bad Tolerable    Normal      Good 
+    ##        47       511       478       163
+
+``` r
+table(test$wine_score)
+```
+
+    ## 
+    ##       Bad Tolerable    Normal      Good 
+    ##        16       170       160        54
+
+``` r
+#baseline model
+rf_base <-randomForest(wine_score~.,train,ntree=150)
+
+#Confusion matrix results
+preds <- predict(rf_base, newdata=test)
+table(preds, test$wine_score) #confusion matrix for test set
+```
+
+    ##            
+    ## preds       Bad Tolerable Normal Good
+    ##   Bad         1         0      0    0
+    ##   Tolerable  13       138     37    2
+    ##   Normal      2        30    111   29
+    ##   Good        0         2     12   23
+
+``` r
+confusionMatrix(table(preds, test$wine_score))
+```
+
+    ## Confusion Matrix and Statistics
+    ## 
+    ##            
+    ## preds       Bad Tolerable Normal Good
+    ##   Bad         1         0      0    0
+    ##   Tolerable  13       138     37    2
+    ##   Normal      2        30    111   29
+    ##   Good        0         2     12   23
+    ## 
+    ## Overall Statistics
+    ##                                           
+    ##                Accuracy : 0.6825          
+    ##                  95% CI : (0.6344, 0.7279)
+    ##     No Information Rate : 0.425           
+    ##     P-Value [Acc > NIR] : < 2.2e-16       
+    ##                                           
+    ##                   Kappa : 0.4825          
+    ##  Mcnemar's Test P-Value : NA              
+    ## 
+    ## Statistics by Class:
+    ## 
+    ##                      Class: Bad Class: Tolerable Class: Normal Class: Good
+    ## Sensitivity              0.0625           0.8118        0.6937      0.4259
+    ## Specificity              1.0000           0.7739        0.7458      0.9595
+    ## Pos Pred Value           1.0000           0.7263        0.6453      0.6216
+    ## Neg Pred Value           0.9624           0.8476        0.7851      0.9146
+    ## Prevalence               0.0400           0.4250        0.4000      0.1350
+    ## Detection Rate           0.0025           0.3450        0.2775      0.0575
+    ## Detection Prevalence     0.0025           0.4750        0.4300      0.0925
+    ## Balanced Accuracy        0.5312           0.7928        0.7198      0.6927
+
+### Decision tree
 
 ``` r
 library(rpart)
+library(DMwR)
 
-dtr_model <- rpart(quality ~., data = train)
-dtr_model
+#apply model to training set
+#dtr_model <- rpartXse(quality ~., data = train)
+
+#predict values using test
+#prediction <- predict(dtr_model,test) 
 ```
-
-    ## n= 1278 
-    ## 
-    ## node), split, n, deviance, yval
-    ##       * denotes terminal node
-    ## 
-    ##  1) root 1278 830.08140 5.635368  
-    ##    2) alcohol< 10.525 790 343.00760 5.364557  
-    ##      4) sulphates< 0.575 313 111.32910 5.156550 *
-    ##      5) sulphates>=0.575 477 209.24950 5.501048  
-    ##       10) fixed_acidity< 10.95 423 163.96220 5.434988  
-    ##         20) volatile_acidity>=0.405 342 115.04090 5.362573 *
-    ##         21) volatile_acidity< 0.405 81  39.55556 5.740741 *
-    ##       11) fixed_acidity>=10.95 54  28.98148 6.018519 *
-    ##    3) alcohol>=10.525 488 335.34430 6.073770  
-    ##      6) sulphates< 0.615 181 124.11050 5.668508  
-    ##       12) volatile_acidity>=1.015 8   4.00000 4.000000 *
-    ##       13) volatile_acidity< 1.015 173  96.80925 5.745665  
-    ##         26) alcohol< 11.45 93  47.22581 5.516129 *
-    ##         27) alcohol>=11.45 80  38.98750 6.012500  
-    ##           54) fixed_acidity< 6.55 27  12.66667 5.555556 *
-    ##           55) fixed_acidity>=6.55 53  17.81132 6.245283 *
-    ##      7) sulphates>=0.615 307 163.98050 6.312704  
-    ##       14) alcohol< 11.55 181  92.20994 6.099448  
-    ##         28) total_sulfur_dioxide>=64 21  11.14286 5.428571 *
-    ##         29) total_sulfur_dioxide< 64 160  70.37500 6.187500  
-    ##           58) volatile_acidity>=0.395 90  25.82222 5.955556 *
-    ##           59) volatile_acidity< 0.395 70  33.48571 6.485714 *
-    ##       15) alcohol>=11.55 126  51.71429 6.619048 *
 
 ``` r
-library(rpart.plot) 
+#library(rpart.plot) 
+#prp(dtr_model,extra=101,box.col="orange",split.box.col="grey")
 ```
 
-    ## Warning: package 'rpart.plot' was built under R version 3.5.2
+Sources and references:
+-----------------------
 
-``` r
-prp(dtr_model,extra=101,box.col="orange",split.box.col="grey")
-```
+-   Torgo, Luis. Data Mining in R. Oakville, Canada: Apple Academic Press Inc., 2017. Print.
 
-![](Kaggle_Wine_Test_files/figure-markdown_github/unnamed-chunk-12-1.png)
+-   <https://shiring.github.io/machine_learning/2017/04/02/unbalanced>
 
-### Classification
+-   data source: www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009/home
 
-To predict if the wine is good, normal, or bad. Used to predict a class.
+-   <https://www.kaggle.com/meepbobeep/intro-to-regression-and-classification-in-r/code>
 
-References and sources
-----------------------
+-   <https://www.kaggle.com/mrshih/time-to-wine-down-and-avoid-pour-decisions-eda>
 
-<https://www.kaggle.com/meepbobeep/intro-to-regression-and-classification-in-r/code>
-
-<https://www.kaggle.com/mrshih/time-to-wine-down-and-avoid-pour-decisions-eda>
-
-<https://www.kaggle.com/grosvenpaul/beginners-guide-to-eda-and-random-forest-using-r>
+-   <https://www.kaggle.com/grosvenpaul/beginners-guide-to-eda-and-random-forest-using-r>
