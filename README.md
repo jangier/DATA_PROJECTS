@@ -1,4 +1,8 @@
-Sample Project
+# Data Science Projects
 ----------------
 
-This is a sample project to demonstrate git.  All files except this one are blank.
+Collection of projects for academic, learning, and personal interests.
+
+# Projects
+----------------
+- [Wine Quality Prediction](https://github.com/jangier/DATA_PROJECTS/blob/master/Kaggle_Wine_Test.md)
