@@ -1,7 +1,14 @@
-# Data Science Projects
+# What is this repository?
 ----------------
 
-Collection of projects for academic, learning, and personal interests.
+This repository is a collection of data science projects for learning and academic purposes.
+
+**Who am I?**
+----------------
+
+Looking to learn as much as I possible can; here are my personal links:
+
+
 
 # Projects
 ----------------
