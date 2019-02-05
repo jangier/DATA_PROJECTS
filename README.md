@@ -1,4 +1,4 @@
-# Data Science Projects?
+# Data Science Projects
 ----------------
 
 This repository is a collection of data science projects for learning and academic purposes.
@@ -8,7 +8,7 @@ This repository is a collection of data science projects for learning and academ
 
 Looking to learn as much as I possible can.
 
-- [LinkedIn](www.linkedin.com/in/jessicaangier)
+- [LinkedIn](https://www.linkedin.com/in/jessicaangier)
 - [Kaggle](https://www.kaggle.com/jangier)
 
 # Projects
