@@ -5,8 +5,7 @@ This repository is a collection of data science projects for learning and academ
 
 **Who am I?**
 ----------------
-
-Looking to learn as much as I possible can.
+Looking to learn.....
 
 - [LinkedIn](https://www.linkedin.com/in/jessicaangier)
 - [Kaggle](https://www.kaggle.com/jangier)
