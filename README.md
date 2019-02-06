@@ -1,6 +1,6 @@
 # Purpose
 ----------------
-This site is my attempt at organization of my projects, experiments, academic learnings, and playings with all the data.
+This site is my attempt at organization of my projects, experiments, academic learnings, and playings with all things data.
 
 **Who am I?**
 ----------------
